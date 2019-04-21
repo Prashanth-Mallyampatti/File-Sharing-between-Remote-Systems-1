@@ -41,17 +41,7 @@ public class Server
 
 			String clientData = new String(clientPacket.getData()).substring(0, clientPacket.getLength());
 			seqNum = binToDec(clientData.substring(0, 32));
-			
-			//Discard Packet
-			if(rand <= probability)
-			{
-				System.out.println("Packet loss, Sequence number: " + seqNum);
-				continue;
-			}
-			
-			checksum = binToDec(clientData.substring(32, 48));
 			packetType = clientData.substring(48, 64);
-
 			receivedList.add(seqNum);
 
 			//EOF
@@ -63,8 +53,15 @@ public class Server
 			
 			//Get Data from client packet
 			String data = clientData.substring(64, clientData.length());
-
-			//validate it
+			checksum = binToDec(clientData.substring(32, 48));
+			
+			//Discarding Packet
+			if(rand <= probability)
+			{
+				System.out.println("Packet loss, Sequence number: " + seqNum);
+				continue;
+			}
+			//validate the data
 			if(validateCheckSum(data) == 0 && seqNum == localPointer)
 			{
 				
@@ -76,8 +73,8 @@ public class Server
 				//Send ACK for the data received.
 				DatagramPacket ackToClient = new DatagramPacket(ack, ack.length, client_IP, client_port);
 				serverSocket.send(ackToClient);
-				//System.out.println("ACK sent for seq num: "+seqNum);
 				ackList.add(seqNum);
+				
 				//Mark local pointer assuming ACK will reach successfully
 				localPointer++;
 			}
@@ -89,14 +86,16 @@ public class Server
 			}
 		}
 
-		//Store the client to a file
+		//Store the client data to 'file'
 		FileOutputStream fp = null;
 		try{
 			fp = new FileOutputStream(file);
 			out.writeTo(fp);
 			fp.close();
+			System.out.println("\nFile write successful");
 		} catch(Exception e) {
 			System.out.println("File write not successful");
+			e.printStackTrace();
 			System.exit(-1);
 		}
 		
