@@ -4,7 +4,9 @@ import java.util.*;
 
 public class Server
 {
-	public static int port, seqNum, checksum;
+	public static int port, seqNum = 0, checksum = 0;
+	public static List<Integer> receivedList = new ArrayList<Integer>();
+	public static List<Integer> ackList = new ArrayList<Integer>();
 	public static float probability;
 	public static String file, packetType;
 	public static void main(String[] args)
@@ -16,60 +18,78 @@ public class Server
 			probability = Float.parseFloat(args[2]);
 		}
 		DatagramSocket serverSocket = null;
-
 		try {
 			serverSocket = new DatagramSocket(port);
 		} catch (SocketException e1)
 		{
 			System.out.println("Socket Error.");
 			e1.printStackTrace();
+			System.exit(-1);
 		}
+	
 		int localPointer = 0;
-		System.out.println("Socket created");
+		System.out.println("Server socket created\nWaiting for packets....");
 		ByteArrayOutputStream out = new ByteArrayOutputStream();
 		boolean flag = true;
-		DatagramPacket clientPacket = null;
 		while(flag)
 		{
 			try {
 			byte[] dataPacket = new byte[2048];
-			clientPacket = new DatagramPacket(dataPacket, dataPacket.length);
+			DatagramPacket clientPacket = new DatagramPacket(dataPacket, dataPacket.length);
 			serverSocket.receive(clientPacket);
 			double rand = Math.random();
-		//	int localPointer = 0;
+
 			String clientData = new String(clientPacket.getData()).substring(0, clientPacket.getLength());
 			seqNum = binToDec(clientData.substring(0, 32));
-			checksum = binToDec(clientData.substring(32, 48));
-			packetType = clientData.substring(48, 64);
-			System.out.println("Received Packet of seq number: "+seqNum);
-			if(packetType.equals("0000000000000000"))
-			{
-				flag = false;
-				break;
-			}
-			String data = clientData.substring(64, clientData.length());
+			
+			//Discard Packet
 			if(rand <= probability)
 			{
-				System.out.println("Packet Lost; Seq num: "+seqNum);
+				System.out.println("Packet loss, Sequence number: " + seqNum);
 				continue;
 			}
-			else if(validateCheckSum(data, checksum) == 0 && seqNum == localPointer)
+			
+			checksum = binToDec(clientData.substring(32, 48));
+			packetType = clientData.substring(48, 64);
+
+			receivedList.add(seqNum);
+
+			//EOF
+			if(packetType.equals("0000000000000000"))
 			{
+				flag = false; 
+				break;
+			}
+			
+			//Get Data from client packet
+			String data = clientData.substring(64, clientData.length());
+
+			//validate it
+			if(validateCheckSum(data) == 0 && seqNum == localPointer)
+			{
+				
 				out.write(data.getBytes());
 				InetAddress client_IP = clientPacket.getAddress();
 				int client_port = clientPacket.getPort();
 				byte[] ack = ackServer(seqNum);
+				
+				//Send ACK for the data received.
 				DatagramPacket ackToClient = new DatagramPacket(ack, ack.length, client_IP, client_port);
 				serverSocket.send(ackToClient);
-				System.out.println("ACK sent for seq num: "+seqNum);
+				//System.out.println("ACK sent for seq num: "+seqNum);
+				ackList.add(seqNum);
+				//Mark local pointer assuming ACK will reach successfully
 				localPointer++;
-			}	
+			}
 			}catch(Exception e)
 			{
 				System.out.println("ERROR");
 				e.printStackTrace();
+				System.exit(-1);
 			}
 		}
+
+		//Store the client to a file
 		FileOutputStream fp = null;
 		try{
 			fp = new FileOutputStream(file);
@@ -77,23 +97,36 @@ public class Server
 			fp.close();
 		} catch(Exception e) {
 			System.out.println("File write not successful");
+			System.exit(-1);
 		}
+		
+		System.out.println("\nPackets successfully recieved:");
+		for(int i=0; i<receivedList.size(); i++)
+			System.out.print(receivedList.get(i) + ", ");
+		System.out.println("\n\nACKs successfully sent:");
+		for(int i=0; i<ackList.size(); i++)
+			System.out.print(ackList.get(i) + ", ");
+		
+		System.out.println("\n\nClosing socket....");
+		
+		//Close the socket on successful communication
 		serverSocket.close();
 	}
 
+	//convert client header to decimal for validation
 	public static int binToDec(String s)
 	{
-		int x=0, val = 0;
+		int x=0, y = 0, val = 0;
 		for(int i = s.length()-1; i>=0; i--)
 		{
-				
 			if(s.charAt(i) == '1')  
-				val +=  Math.pow(2,x);
+				val += Math.pow(2, x);
 			x++;
 		}
 		return val;
 	}
 
+	//create ACK packet for 'seqNum' to send to client
 	public static byte[] ackServer(int seqNum)
 	{
 		String header = Integer.toBinaryString(seqNum);
@@ -103,7 +136,8 @@ public class Server
 		return header.getBytes();
 	}
 
-	public static int validateCheckSum(String data, int checksum)
+	//checksum for client data
+	public static int validateCheckSum(String data)
 	{
 		String hexString = new String();
 		int i, value, result = 0;
