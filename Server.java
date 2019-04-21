@@ -4,11 +4,11 @@ import java.util.*;
 
 public class Server
 {
-	public static int port, seqNum = 0, checksum = 0;
-	public static List<Integer> receivedList = new ArrayList<Integer>();
-	public static List<Integer> ackList = new ArrayList<Integer>();
+	private static int port, seqNum = 0, checksum = 0;
+	private static List<Integer> receivedList = new ArrayList<Integer>();
+	private static List<Integer> ackList = new ArrayList<Integer>();
 	public static float probability;
-	public static String file, packetType;
+	private static String file, packetType;
 	public static void main(String[] args)
 	{
 		if(args.length > 2)
@@ -107,14 +107,12 @@ public class Server
 		for(int i=0; i<ackList.size(); i++)
 			System.out.print(ackList.get(i) + ", ");
 		
-		System.out.println("\n\nClosing socket....");
-		
-		//Close the socket on successful communication
+		System.out.println("\n\nClosing socket....");	
 		serverSocket.close();
 	}
 
 	//convert client header to decimal for validation
-	public static int binToDec(String s)
+	private static int binToDec(String s)
 	{
 		int x=0, y = 0, val = 0;
 		for(int i = s.length()-1; i>=0; i--)
@@ -127,7 +125,7 @@ public class Server
 	}
 
 	//create ACK packet for 'seqNum' to send to client
-	public static byte[] ackServer(int seqNum)
+	private static byte[] ackServer(int seqNum)
 	{
 		String header = Integer.toBinaryString(seqNum);
 		for(int i = header.length(); i<32; i++)
@@ -137,7 +135,7 @@ public class Server
 	}
 
 	//checksum for client data
-	public static int validateCheckSum(String data)
+	private static int validateCheckSum(String data)
 	{
 		String hexString = new String();
 		int i, value, result = 0;
