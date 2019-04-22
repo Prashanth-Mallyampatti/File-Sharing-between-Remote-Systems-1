@@ -5,12 +5,12 @@ import java.util.*;
 import java.nio.file.*;
 
 class Segment
-{
-	int index; 
-	Segment next;
-	String data;
+{ 
+	protected int index; 
+	protected Segment next;
+	protected String data;
 
-	public Segment(int index, String data)
+	protected Segment(int index, String data)
 	{
 		this.index = index;
 		this.next = null;
@@ -19,17 +19,21 @@ class Segment
 }
 public class Client
 {
-	public static Segment head;
-	public static int port, N, mss;
-	public static String file, host;
-	public Client()
+	private static Segment head;
+	private static int port, N, mss, numPackets, localPointer = 0, windowPointer = 0, ack = -1;
+	private static String file, host;
+	private static List<Integer> sentPackets = new ArrayList<Integer>();
+	private static List<Integer> acksReceived = new ArrayList<Integer>();
+	protected static DatagramSocket clientSocket = null;
+
+	protected Client()
 	{
 		head = null;
 	}
 
 	public static void main(String[] args) throws IOException
 	{
-		System.out.println("In client");
+		System.out.println("Client started with Go-Back-N ARQ protocol.");
 		if(args.length > 4)
 		{
 			host = args[0];
@@ -38,7 +42,6 @@ public class Client
 			N = Integer.parseInt(args[3]);
 			mss = Integer.parseInt(args[4]);
 		}
-		DatagramSocket clientSocket = null;
 		try {
 			clientSocket = new DatagramSocket();
 		} catch(Exception e0)
@@ -46,7 +49,8 @@ public class Client
 			System.out.println("Client Socket Error");
 			e0.printStackTrace();
 		}
-
+		
+		//get server ip address
 		InetAddress serverIp = null;
 		try {
 			serverIp = InetAddress.getByName(host);
@@ -55,92 +59,132 @@ public class Client
 			System.out.println("Host error");
 			e6.printStackTrace();
 		}
+
+		//read data to send
 		Path fp = Paths.get(file);
-		byte[] dataPacket = null;
+		byte[] dataToSend = null;
 		try {
-			dataPacket = Files.readAllBytes(fp);
+			dataToSend = Files.readAllBytes(fp);
 		} catch(IOException e1)
 		{
-			System.out.println("client io exception");
+			System.out.println("client IO exception");
 			e1.printStackTrace();
 		}
-	//	numPackets = (int) Math.ceil((double) dataPacket.length / mss);
-		dividePacket(dataPacket);
-		int localPointer = 0, ptr = 0, ack = -1;
-		while((localPointer * mss) < dataPacket.length)
-		{
-			while(ptr < N && (localPointer * mss) < dataPacket.length)
-			{
-				Segment temp = head;
-				while(temp.index != localPointer)
-					temp = temp.next;
-				String s = temp.data;
-				byte[] header = addHeader(localPointer, s);
-				byte[] dataB = s.getBytes();
-				byte[] packet = new byte[header.length + dataB.length];
-				for(int i=0, j=0; i<packet.length; i++)
-				{
-					if(i < header.length)
-						packet[i] = header[i];
-					else
-					{
-						packet[i] = dataB[j];
-						j++;
-					}
-				}
-				DatagramPacket toServer = new DatagramPacket(packet, packet.length, serverIp, port);
-				try {
-					clientSocket.send(toServer);
-					System.out.println("Packet sent: " + localPointer);
-					localPointer++;
-					ptr++;
-				} catch(Exception e2)
-				{
-					System.out.println("Error sending packet");
-					e2.printStackTrace();
-				}
-			}
 
-			int timeout = 1000;
-			byte[] receive = new byte[1536];
+		File f = new File(file);
+		System.out.println("Size of file: " + f.length());
+		
+		//calculate the number of packets to be generated based on the file size and generate the packets
+		numPackets = (int) Math.ceil((double) f.length() / mss);
+		dividePacket(dataToSend);
+
+		//Increment in size of MSS till the last packet
+		while((localPointer * mss) < dataToSend.length)
+		{	
+			//Transmit data to server
+			sendPacketToServer(dataToSend, serverIp);
+
+			//standard eth mss is 1540 bytes
+			byte[] receive = new byte[1540];
+
+			//to receive ACKs from server
 			DatagramPacket server = new DatagramPacket(receive, receive.length);
 			boolean flag = true;
 			int temp = localPointer;
 			try {
-				clientSocket.setSoTimeout(timeout);
+				//set timeout of 1000ms
+				clientSocket.setSoTimeout(1000);
 				while(flag)
 				{
 					clientSocket.receive(server);
+					//loop until you get ACKs for all packets you sent earlier
 					ack = checkAck(server.getData());
-					System.out.println("ACK received for: " + ack);
+					acksReceived.add(ack);
+
+					//if you receive the ACK for last sent packet, go to next segment
 					if(ack == temp -1)
 					{
-						ptr = 0;
+						windowPointer = 0;
 						localPointer = temp;
 						flag = false;
 					}
+
+					//if you receive any other, other than negative ACK, advance the window pointer to that packet
 					else if(ack != -1)
 					{
-						ptr = localPointer - ack - 1;
+						windowPointer = localPointer - ack - 1;
 						localPointer = ack + 1;
 					}
 				}
 			} catch(SocketTimeoutException e4)
 			{
-				System.out.println("Timeout for seq num: " + ack);
+				//If timed out, set the pointer to next packet of last received ACK
+				System.out.println("Timeout, sequence number: " + ack);
 				localPointer = ack + 1;
-				ptr = 0;
+				windowPointer = 0;
 			}
 		}
+
+		//Send an EOF packet.
 		String eof = "0000000000000000000000000000000000000000000000000000000000000000000000000000";
 		byte[] eof_ = eof.getBytes();
 		DatagramPacket eofPacket = new DatagramPacket(eof_, eof_.length, serverIp, port);
 		clientSocket.send(eofPacket);
+		
+		System.out.println("\nAll data sent.\nClient closing..");
+		clientSocket.close();
 	}
 	
+	public static void sendPacketToServer(byte[] dataToSend, InetAddress serverIp)
+	{
+		while(windowPointer < N && (localPointer * mss) < dataToSend.length)
+		{
+			//Get packet parameters from local pointer
+			Segment dataPacket = head;
+			while(dataPacket.index != localPointer)
+				dataPacket = dataPacket.next;
+			String s = dataPacket.data;
+
+			//Add header to the packet
+			byte[] header = addHeader(localPointer, s);
+			byte[] dataB = s.getBytes();
+			byte[] packet = new byte[header.length + dataB.length];
+
+			int i = 0, j = 0;
+			while(i < packet.length)
+			{
+				if(i < header.length)
+					packet[i] = header[i];
+				else
+				{
+					packet[i] = dataB[j];
+					j++;
+				}
+				i++;
+			}
+
+			//send packet to server
+			DatagramPacket toServer = new DatagramPacket(packet, packet.length, serverIp, port);
+			try {
+				clientSocket.send(toServer);
+				sentPackets.add(localPointer);
+				localPointer++;
+				windowPointer++;
+			} catch(Exception e2)
+			{
+				System.out.println("Error sending packet");
+				e2.printStackTrace();
+			}
+		}
+
+	}
+
+	//add header to the client data
 	public static byte[] addHeader(int num, String data)
 	{
-		String seq = Integer.toBinaryString(num);        
+		String seq = Integer.toBinaryString(num);       
+
+		//compute the checksum
 		String hexString = new String();
 		int i, value, result = 0;
 		for(i = 0; i<data.length() - 2; i=i+2)
@@ -184,13 +228,15 @@ public class Client
 		String str = "0101010101010101";
 		for(int k = seq.length(); k<32; k++)
 			seq = "0" + seq;
+
+		//Add padding and checksum to the data
 		String total = seq + pad + str;
 		return total.getBytes();
 	}
 
+	//make packets and store it is a class list
 	public static void dividePacket(byte[] dataPacket)
 	{
-		int numPackets = (int) Math.ceil((double) dataPacket.length / mss);
 		String data = new String(dataPacket);
 		for(int i=0; i<numPackets; i++)
 		{
@@ -198,19 +244,20 @@ public class Client
 			if(j > data.length())
 				j = data.length();
 			Segment seg = new Segment(i, data.substring(mss * i, j));
-			if(head == null)
-				head = seg;
-			
-			else
+			if(head != null)
 			{
 				Segment temp = head; 
 				while(temp.next != null)
 					temp = temp.next;
 				temp.next = seg;
+				//head = temp;
 			}
+			else
+				head = seg;
 		}
 	}
-	
+
+	//check the ACK packet and determine to which sequence its ack'ed for
 	public static int checkAck(byte[] data)
 	{
 		String ack = "";
@@ -229,6 +276,7 @@ public class Client
 		return -1;
 	}
 
+	//convert binary to decimal value
 	public static int binToDec(String s)
 	{
 		int x=0, val = 0;
