@@ -84,58 +84,19 @@ public class Client
 			//Transmit data to server
 			sendPacketToServer(dataToSend, serverIp);
 
-			//standard eth mss is 1540 bytes
-			byte[] receive = new byte[1540];
-
-			//to receive ACKs from server
-			DatagramPacket server = new DatagramPacket(receive, receive.length);
-			boolean flag = true;
-			int temp = localPointer;
-			try {
-				//set timeout of 1000ms
-				clientSocket.setSoTimeout(1000);
-				while(flag)
-				{
-					clientSocket.receive(server);
-					//loop until you get ACKs for all packets you sent earlier
-					ack = checkAck(server.getData());
-					acksReceived.add(ack);
-
-					//if you receive the ACK for last sent packet, go to next segment
-					if(ack == temp -1)
-					{
-						windowPointer = 0;
-						localPointer = temp;
-						flag = false;
-					}
-
-					//if you receive any other, other than negative ACK, advance the window pointer to that packet
-					else if(ack != -1)
-					{
-						windowPointer = localPointer - ack - 1;
-						localPointer = ack + 1;
-					}
-				}
-			} catch(SocketTimeoutException e4)
-			{
-				//If timed out, set the pointer to next packet of last received ACK
-				System.out.println("Timeout, sequence number: " + ack);
-				localPointer = ack + 1;
-				windowPointer = 0;
-			}
+			//Receive ACK from server
+			receiveACK();
 		}
 
 		//Send an EOF packet.
-		String eof = "0000000000000000000000000000000000000000000000000000000000000000000000000000";
-		byte[] eof_ = eof.getBytes();
-		DatagramPacket eofPacket = new DatagramPacket(eof_, eof_.length, serverIp, port);
-		clientSocket.send(eofPacket);
-		
+		sendEOF(serverIp);
+
+		//Close client
 		System.out.println("\nAll data sent.\nClient closing..");
 		clientSocket.close();
 	}
-	
-	public static void sendPacketToServer(byte[] dataToSend, InetAddress serverIp)
+
+	private static void sendPacketToServer(byte[] dataToSend, InetAddress serverIp)
 	{
 		while(windowPointer < N && (localPointer * mss) < dataToSend.length)
 		{
@@ -178,9 +139,60 @@ public class Client
 		}
 
 	}
+	
+	private static void receiveACK() throws IOException
+	{
+		//standard eth mss is 1540 bytes
+		byte[] receive = new byte[1540];
+
+		//to receive ACKs from server
+		DatagramPacket server = new DatagramPacket(receive, receive.length);
+		boolean flag = true;
+		int temp = localPointer;
+		try {
+			//set timeout of 1000ms
+			clientSocket.setSoTimeout(1000);
+			while(flag)
+			{
+				clientSocket.receive(server);
+				//loop until you get ACKs for all packets you sent earlier
+				ack = checkAck(server.getData());
+				acksReceived.add(ack);
+
+				//if you receive the ACK for last sent packet, go to next segment
+				if(ack == temp - 1)
+				{
+					windowPointer = 0;
+					localPointer = temp;
+					flag = false;
+				}
+
+				//if you receive any other, other than negative ACK, advance the window pointer to that packet
+				else if(ack != -1)
+				{
+					windowPointer = localPointer - ack - 1;
+					localPointer = ack + 1;
+				}
+			}
+		} catch(SocketTimeoutException e4)
+		{
+			//If timed out, set the pointer to next packet of last received ACK
+			System.out.println("Timeout, sequence number: " + ack);
+			localPointer = ack + 1;
+			windowPointer = 0;
+		}
+	}
+
+	private static void sendEOF(InetAddress serverIp) throws IOException
+	{
+		String eof = "0000000000000000000000000000000000000000000000000000000000000000000000000000";
+		byte[] eof_ = eof.getBytes();
+		DatagramPacket eofPacket = new DatagramPacket(eof_, eof_.length, serverIp, port);
+		clientSocket.send(eofPacket);
+	}
 
 	//add header to the client data
-	public static byte[] addHeader(int num, String data)
+	private static byte[] addHeader(int num, String data)
 	{
 		String seq = Integer.toBinaryString(num);       
 
@@ -235,7 +247,7 @@ public class Client
 	}
 
 	//make packets and store it is a class list
-	public static void dividePacket(byte[] dataPacket)
+	private static void dividePacket(byte[] dataPacket)
 	{
 		String data = new String(dataPacket);
 		for(int i=0; i<numPackets; i++)
@@ -258,7 +270,7 @@ public class Client
 	}
 
 	//check the ACK packet and determine to which sequence its ack'ed for
-	public static int checkAck(byte[] data)
+	private static int checkAck(byte[] data)
 	{
 		String ack = "";
 		for(int i=0; i<64; i++)
@@ -277,7 +289,7 @@ public class Client
 	}
 
 	//convert binary to decimal value
-	public static int binToDec(String s)
+	private static int binToDec(String s)
 	{
 		int x=0, val = 0;
 		for(int i=s.length()-1; i>=0; i--)
