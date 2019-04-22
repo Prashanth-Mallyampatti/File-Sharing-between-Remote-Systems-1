@@ -33,7 +33,7 @@ public class Client
 
 	public static void main(String[] args) throws IOException
 	{
-		System.out.println("Client started with Go-Back-N ARQ protocol.");
+		System.out.println("\nClient started with Go-Back-N ARQ protocol.");
 		if(args.length > 4)
 		{
 			host = args[0];
@@ -46,7 +46,7 @@ public class Client
 			clientSocket = new DatagramSocket();
 		} catch(Exception e0)
 		{
-			System.out.println("Client Socket Error");
+			System.out.println("\nClient Socket Error");
 			e0.printStackTrace();
 		}
 		
@@ -56,7 +56,7 @@ public class Client
 			serverIp = InetAddress.getByName(host);
 		} catch(UnknownHostException e6)
 		{
-			System.out.println("Host error");
+			System.out.println("\nHost error");
 			e6.printStackTrace();
 		}
 
@@ -67,12 +67,12 @@ public class Client
 			dataToSend = Files.readAllBytes(fp);
 		} catch(IOException e1)
 		{
-			System.out.println("client IO exception");
+			System.out.println("\nclient IO exception");
 			e1.printStackTrace();
 		}
 
 		File f = new File(file);
-		System.out.println("Size of file: " + f.length());
+		System.out.println("Size of file: " + f.length() + "\n");
 		
 		//calculate the number of packets to be generated based on the file size and generate the packets
 		numPackets = (int) Math.ceil((double) f.length() / mss);
@@ -91,8 +91,15 @@ public class Client
 		//Send an EOF packet.
 		sendEOF(serverIp);
 
+		System.out.println("\nSent Packets: ");
+		for(int i=0; i<sentPackets.size(); i++)
+			System.out.print(sentPackets.get(i) + ", ");
+		System.out.println("\n\nReceived ACKs");
+		for(int i=0; i<acksReceived.size(); i++)
+			System.out.print(acksReceived.get(i) + ", ");
+
 		//Close client
-		System.out.println("\nAll data sent.\nClient closing..");
+		System.out.println("\n\nAll data sent.\n\nClient closing..");
 		clientSocket.close();
 	}
 
@@ -133,7 +140,7 @@ public class Client
 				windowPointer++;
 			} catch(Exception e2)
 			{
-				System.out.println("Error sending packet");
+				System.out.println("\nError sending packet");
 				e2.printStackTrace();
 			}
 		}

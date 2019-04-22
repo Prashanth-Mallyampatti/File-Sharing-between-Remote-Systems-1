@@ -28,7 +28,7 @@ public class Server
 		}
 	
 		int localPointer = 0;
-		System.out.println("Server socket created\nWaiting for packets....");
+		System.out.println("Server socket created\nWaiting for packets....\n");
 		ByteArrayOutputStream out = new ByteArrayOutputStream();
 		boolean flag = true;
 		while(flag)
@@ -87,6 +87,7 @@ public class Server
 		}
 
 		//Store the client data to 'file'
+		System.out.println("\nWriting to file...");
 		FileOutputStream fp = null;
 		try{
 			fp = new FileOutputStream(file);
