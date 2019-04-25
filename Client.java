@@ -184,7 +184,7 @@ public class Client
 		} catch(SocketTimeoutException e4)
 		{
 			//If timed out, set the pointer to next packet of last received ACK
-			System.out.println("Timeout, sequence number: " + ack);
+			System.out.println("Timeout, sequence number: " + (ack+1));
 			localPointer = ack + 1;
 			windowPointer = 0;
 		}
@@ -201,7 +201,7 @@ public class Client
 	//add header to the client data
 	private static byte[] addHeader(int num, String data)
 	{
-		String seq = Integer.toBinaryString(num);       
+		String seq = Long.toBinaryString( num & 0xffffffffL | 0x100000000L ).substring(1);
 
 		//compute the checksum
 		String hexString = new String();
@@ -239,17 +239,13 @@ public class Client
 			result += carry;
 		}
 		result = Integer.parseInt("FFFF", 16) - result;
-		String pad = Integer.toBinaryString(result);
-		for(int j=pad.length(); j<16; j++)
-			pad = "0" + pad;
 
+		String checksum = Long.toBinaryString( result & 0xfffffL | 0x10000L ).substring(1);
 
 		String str = "0101010101010101";
-		for(int k = seq.length(); k<32; k++)
-			seq = "0" + seq;
 
 		//Add padding and checksum to the data
-		String total = seq + pad + str;
+		String total = seq + checksum + str;
 		return total.getBytes();
 	}
 
@@ -259,10 +255,7 @@ public class Client
 		String data = new String(dataPacket);
 		for(int i=0; i<numPackets; i++)
 		{
-			int j = mss * (i+1);
-			if(j > data.length())
-				j = data.length();
-			Segment seg = new Segment(i, data.substring(mss * i, j));
+			Segment seg = new Segment(i, data.substring(mss * i, Math.min(mss * (i+1), data.length())));
 			if(head != null)
 			{
 				Segment temp = head; 

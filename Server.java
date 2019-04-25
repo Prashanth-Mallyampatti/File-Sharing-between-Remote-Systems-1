@@ -42,6 +42,7 @@ public class Server
 			String clientData = new String(clientPacket.getData()).substring(0, clientPacket.getLength());
 			seqNum = binToDec(clientData.substring(0, 32));
 			packetType = clientData.substring(48, 64);
+
 			receivedList.add(seqNum);
 
 			//EOF
@@ -62,9 +63,8 @@ public class Server
 				continue;
 			}
 			//validate the data
-			if(validateCheckSum(data) == 0 && seqNum == localPointer)
+			if(validateCheckSum(data) == 0.0 && seqNum == localPointer)
 			{
-				
 				out.write(data.getBytes());
 				InetAddress client_IP = clientPacket.getAddress();
 				int client_port = clientPacket.getPort();
@@ -100,7 +100,7 @@ public class Server
 			System.exit(-1);
 		}
 		
-		System.out.println("\nPackets successfully recieved:");
+		System.out.println("\nPackets recieved:");
 		for(int i=0; i<receivedList.size(); i++)
 			System.out.print(receivedList.get(i) + ", ");
 		System.out.println("\n\nACKs successfully sent:");
@@ -135,7 +135,7 @@ public class Server
 	}
 
 	//checksum for client data
-	private static int validateCheckSum(String data)
+	private static float validateCheckSum(String data)
 	{
 		String hexString = new String();
 		int i, value, result = 0;
@@ -148,6 +148,7 @@ public class Server
 			value = Integer.parseInt(hexString, 16);
 			result = result + value;
 		}
+		
         	if (data.length() % 2 == 0) 
 		{
             		value = (int) (data.charAt(i));
@@ -158,11 +159,12 @@ public class Server
         	} 
 		else 
 		{
-            		value = (int) (data.charAt(i));
+            		value = (int)(data.charAt(i));
             		hexString = "00" + Integer.toHexString(value);
             		value = Integer.parseInt(hexString, 16);
         	}
         	result += value;
+
         	hexString = Integer.toHexString(result);
        		 if (hexString.length() > 4) 
 		 {
@@ -171,10 +173,7 @@ public class Server
             		result = Integer.parseInt(hexString, 16);
             		result += carry;
         	}
-        	result = Integer.parseInt("FFFF", 16) - result;
-        	result = Integer.parseInt("FFFF", 16) - result;
-		int valid = result + checksum;
-        	valid = Integer.parseInt("FFFF", 16) - valid;
-        	return valid;
+		
+		return Integer.parseInt("FFFF", 16) - result - checksum;
     	}
 }
