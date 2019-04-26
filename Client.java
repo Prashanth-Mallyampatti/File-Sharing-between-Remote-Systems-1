@@ -42,6 +42,8 @@ public class Client
 			N = Integer.parseInt(args[3]);
 			mss = Integer.parseInt(args[4]);
 		}
+
+		int window[]= new int[N];
 		try {
 			clientSocket = new DatagramSocket();
 		} catch(Exception e0)
@@ -82,44 +84,43 @@ public class Client
 		while((localPointer * mss) < dataToSend.length)
 		{	
 			//Transmit data to server
-			sendPacketToServer(dataToSend, serverIp);
+			sendPacketToServer(dataToSend, serverIp, window);
 
 			//Receive ACK from server
-			receiveACK();
+			receiveACK(window);
 		}
 
 		//Send an EOF packet.
 		sendEOF(serverIp);
-
-		System.out.println("\nSent Packets: ");
-		for(int i=0; i<sentPackets.size(); i++)
-			System.out.print(sentPackets.get(i) + ", ");
-		System.out.println("\n\nReceived ACKs");
-		for(int i=0; i<acksReceived.size(); i++)
-			System.out.print(acksReceived.get(i) + ", ");
 
 		//Close client
 		System.out.println("\n\nAll data sent.\n\nClient closing..");
 		clientSocket.close();
 	}
 
-	private static void sendPacketToServer(byte[] dataToSend, InetAddress serverIp)
+	private static void sendPacketToServer(byte[] dataToSend, InetAddress serverIp, int[] window)
 	{
-		while(windowPointer < N && (localPointer * mss) < dataToSend.length)
+		for(windowPointer=0; windowPointer<N; windowPointer++)
 		{
+			if((localPointer * mss) > dataToSend.length)
+				break;
+			if(window[windowPointer] == 2)
+			{
+				localPointer++;
+				continue;
+			}
 			//Get packet parameters from local pointer
-			Segment dataPacket = head;
-			while(dataPacket.index != localPointer)
-				dataPacket = dataPacket.next;
-			String s = dataPacket.data;
+			Segment temp = head;
+			while(temp.index != localPointer && temp != null)
+				temp = temp.next;
+			String s = temp.data;
 
 			//Add header to the packet
 			byte[] header = addHeader(localPointer, s);
 			byte[] dataB = s.getBytes();
 			byte[] packet = new byte[header.length + dataB.length];
 
-			int i = 0, j = 0;
-			while(i < packet.length)
+			for(int i = 0, j = 0; i<packet.length; i++)
 			{
 				if(i < header.length)
 					packet[i] = header[i];
@@ -128,16 +129,15 @@ public class Client
 					packet[i] = dataB[j];
 					j++;
 				}
-				i++;
 			}
 
 			//send packet to server
 			DatagramPacket toServer = new DatagramPacket(packet, packet.length, serverIp, port);
 			try {
 				clientSocket.send(toServer);
-				sentPackets.add(localPointer);
+				System.out.println("Packet Sent: " + localPointer);
 				localPointer++;
-				windowPointer++;
+				window[windowPointer] = 1;
 			} catch(Exception e2)
 			{
 				System.out.println("\nError sending packet");
@@ -147,7 +147,7 @@ public class Client
 
 	}
 	
-	private static void receiveACK() throws IOException
+	private static void receiveACK(int[] window) throws IOException
 	{
 		//standard eth mss is 1540 bytes
 		byte[] receive = new byte[1540];
@@ -155,8 +155,9 @@ public class Client
 		//to receive ACKs from server
 		DatagramPacket server = new DatagramPacket(receive, receive.length);
 		boolean flag = true;
-		int temp = localPointer;
+		localPointer = localPointer - windowPointer;
 		try {
+	
 			//set timeout of 1000ms
 			clientSocket.setSoTimeout(1000);
 			while(flag)
@@ -164,29 +165,29 @@ public class Client
 				clientSocket.receive(server);
 				//loop until you get ACKs for all packets you sent earlier
 				ack = checkAck(server.getData());
-				acksReceived.add(ack);
-
-				//if you receive the ACK for last sent packet, go to next segment
-				if(ack == temp - 1)
-				{
-					windowPointer = 0;
-					localPointer = temp;
-					flag = false;
-				}
+				System.out.println("ACK received for: " + ack);
 
 				//if you receive any other, other than negative ACK, advance the window pointer to that packet
-				else if(ack != -1)
+				if(ack != -1)
 				{
-					windowPointer = localPointer - ack - 1;
-					localPointer = ack + 1;
+					int x = ack - localPointer;
+					window[ack - localPointer] = 2;
+					if((ack - localPointer) == 0)
+					{
+						while(window[x] == 2)
+						{
+							for(int i=1; i<N; i++)
+								window[i - 1] = window[i];
+						//	window[N - 1] = -1;
+							localPointer++;
+						}
+					}
 				}
 			}
 		} catch(SocketTimeoutException e4)
 		{
 			//If timed out, set the pointer to next packet of last received ACK
 			System.out.println("Timeout, sequence number: " + (ack+1));
-			localPointer = ack + 1;
-			windowPointer = 0;
 		}
 	}
 

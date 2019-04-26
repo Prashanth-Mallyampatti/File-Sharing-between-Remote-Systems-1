@@ -2,8 +2,26 @@ import java.io.*;
 import java.net.*;
 import java.util.*;
 
+class serverSegment
+{
+	int index;
+	String data;
+	serverSegment next;
+	public serverSegment(int index, String data)
+	{
+		this.index = index;
+		this.next = null;
+		this.data = data;
+	}
+}
+
 public class Server
 {
+	private static serverSegment head;
+	public Server()
+	{
+		head = null;
+	}
 	private static int port, seqNum = 0, checksum = 0;
 	private static List<Integer> receivedList = new ArrayList<Integer>();
 	private static List<Integer> ackList = new ArrayList<Integer>();
@@ -41,6 +59,7 @@ public class Server
 
 			String clientData = new String(clientPacket.getData()).substring(0, clientPacket.getLength());
 			seqNum = binToDec(clientData.substring(0, 32));
+			System.out.println("Packet Received: "+ seqNum);
 			packetType = clientData.substring(48, 64);
 
 			receivedList.add(seqNum);
@@ -63,9 +82,8 @@ public class Server
 				continue;
 			}
 			//validate the data
-			if(validateCheckSum(data) == 0.0 && seqNum == localPointer)
+			if(validateCheckSum(data) == 0)
 			{
-				out.write(data.getBytes());
 				InetAddress client_IP = clientPacket.getAddress();
 				int client_port = clientPacket.getPort();
 				byte[] ack = ackServer(seqNum);
@@ -73,10 +91,53 @@ public class Server
 				//Send ACK for the data received.
 				DatagramPacket ackToClient = new DatagramPacket(ack, ack.length, client_IP, client_port);
 				serverSocket.send(ackToClient);
-				ackList.add(seqNum);
+				System.out.println("ACK sent for: "+seqNum);
 				
+				out.write(data.getBytes());
 				//Mark local pointer assuming ACK will reach successfully
+			if(seqNum == localPointer)
+			{
 				localPointer++;
+				out.write(data.getBytes());
+				serverSegment seg = head;
+				while(seg != null)
+				{
+					if(seg.index == localPointer)
+					{
+						out.write(seg.data.getBytes());
+						seg = seg.next;
+						localPointer++; //maintain the order of receiving
+					}
+					else 
+						break;
+				}
+			}
+			else if(seqNum > localPointer)
+			{
+				serverSegment seg_ = new serverSegment(seqNum, data);
+				if(head == null)
+					head = seg_;
+				else
+				{
+					serverSegment temp = head;
+					serverSegment temp_prev = head;
+					while(temp.next != null && temp.index < seqNum)
+					{
+						temp_prev = temp;
+						temp = temp.next;
+					}
+					if(temp.index < seqNum)
+						temp.next = seg_;
+					else
+					{
+						if(temp_prev != temp)
+							temp_prev.next = seg_;
+						else
+							head = seg_;
+						seg_.next = temp;
+					}
+				}
+			}
 			}
 			}catch(Exception e)
 			{
@@ -99,13 +160,6 @@ public class Server
 			e.printStackTrace();
 			System.exit(-1);
 		}
-		
-		System.out.println("\nPackets recieved:");
-		for(int i=0; i<receivedList.size(); i++)
-			System.out.print(receivedList.get(i) + ", ");
-		System.out.println("\n\nACKs successfully sent:");
-		for(int i=0; i<ackList.size(); i++)
-			System.out.print(ackList.get(i) + ", ");
 		
 		System.out.println("\n\nClosing socket....");	
 		serverSocket.close();
