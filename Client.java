@@ -3,6 +3,7 @@ import java.net.*;
 import java.nio.*;
 import java.util.*;
 import java.nio.file.*;
+import java.time.*;
 
 class Segment
 { 
@@ -22,17 +23,15 @@ public class Client
 	private static Segment head;
 	private static int port, N, mss, numPackets, localPointer = 0, windowPointer = 0, ack = -1;
 	private static String file, host;
-	private static List<Integer> sentPackets = new ArrayList<Integer>();
-	private static List<Integer> acksReceived = new ArrayList<Integer>();
 	protected static DatagramSocket clientSocket = null;
-	protected static HashMap<Integer, Integer> map = new HashMap<Integer, Integer>();
+	private static HashMap<Integer, Integer> map = new HashMap<Integer, Integer>();
 
 	protected Client()
 	{
 		head = null;
 	}
 
-	public static void main(String[] args) throws IOException
+	public static void main(String[] args) throws Exception
 	{
 		System.out.println("\nClient started with Go-Back-N ARQ protocol.");
 		if(args.length > 4)
@@ -43,7 +42,7 @@ public class Client
 			N = Integer.parseInt(args[3]);
 			mss = Integer.parseInt(args[4]);
 		}
-
+		
 		int window[]= new int[N];
 		try {
 			clientSocket = new DatagramSocket();
@@ -81,6 +80,8 @@ public class Client
 		numPackets = (int) Math.ceil((double) f.length() / mss);
 		dividePacket(dataToSend);
 
+		long start = System.currentTimeMillis();
+
 		//Increment in size of MSS till the last packet
 		while((localPointer * mss) < dataToSend.length)
 		{	
@@ -94,8 +95,12 @@ public class Client
 		//Send an EOF packet.
 		sendEOF(serverIp);
 
+		long end = System.currentTimeMillis();
+
+		System.out.println("File Transfered.\nTime taken: " + (end - start) + " ms");
+
 		//Close client
-		System.out.println("All data sent.\n\nClient closing..");
+		System.out.println("\nClient closing..");
 		clientSocket.close();
 	}
 
@@ -125,7 +130,8 @@ public class Client
 			byte[] dataB = s.getBytes();
 			byte[] packet = new byte[header.length + dataB.length];
 
-			for(int i = 0, j = 0; i<packet.length; i++)
+			int i = 0, j = 0;
+			while(i<packet.length)
 			{
 				if(i < header.length)
 					packet[i] = header[i];
@@ -134,6 +140,7 @@ public class Client
 					packet[i] = dataB[j];
 					j++;
 				}
+				i++;
 			}
 
 			//send packet to server
@@ -149,7 +156,6 @@ public class Client
 				e2.printStackTrace();
 			}
 		}
-
 	}
 	
 	private static void receiveACK(int[] window) throws IOException

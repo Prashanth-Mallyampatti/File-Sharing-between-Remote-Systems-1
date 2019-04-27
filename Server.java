@@ -1,13 +1,15 @@
 import java.io.*;
 import java.net.*;
 import java.util.*;
+import java.time.*;
 
 class serverSegment
 {
-	int index;
-	String data;
-	serverSegment next;
-	public serverSegment(int index, String data)
+	protected int index;
+	protected String data;
+	protected serverSegment next;
+
+	protected serverSegment(int index, String data)
 	{
 		this.index = index;
 		this.next = null;
@@ -23,10 +25,9 @@ public class Server
 		head = null;
 	}
 	private static int port, seqNum = 0, checksum = 0;
-	private static List<Integer> receivedList = new ArrayList<Integer>();
-	private static List<Integer> ackList = new ArrayList<Integer>();
 	private static float probability;
 	private static String file, packetType;
+	private static List<Integer> acksSent = new ArrayList<Integer>();
 	public static void main(String[] args)
 	{
 		if(args.length > 2)
@@ -49,6 +50,7 @@ public class Server
 		System.out.println("Server socket created\nWaiting for packets....\n");
 		ByteArrayOutputStream out = new ByteArrayOutputStream();
 		boolean flag = true;
+
 		while(flag)
 		{
 			try {
@@ -61,8 +63,6 @@ public class Server
 			seqNum = binToDec(clientData.substring(0, 32));
 			//System.out.println("Packet Received: "+ seqNum);
 			packetType = clientData.substring(48, 64);
-
-			receivedList.add(seqNum);
 
 			//EOF
 			if(packetType.equals("0000000000000000"))
@@ -81,7 +81,7 @@ public class Server
 				System.out.println("Packet loss, Sequence number: " + seqNum);
 				continue;
 			}
-			//validate the data
+			//validate the data and slide the window accordingly
 			if(validateCheckSum(data) == 0 && seqNum == localPointer)
 			{
 				InetAddress client_IP = clientPacket.getAddress();
@@ -93,6 +93,7 @@ public class Server
 				serverSocket.send(ackToClient);
 				//System.out.println("ACK sent for: "+seqNum);
 				
+				acksSent.add(seqNum);
 				//Mark local pointer assuming ACK will reach successfully
 				localPointer++;
 				out.write(data.getBytes());
@@ -125,6 +126,8 @@ public class Server
 				serverSocket.send(ackToClient);
 				//System.out.println("ACK sent for: "+seqNum);
 				
+				acksSent.add(seqNum);
+
 				//generate a window and make head point to it
 				serverSegment seg_ = new serverSegment(seqNum, data);
 				if(head == null)
@@ -142,9 +145,8 @@ public class Server
 						temp.next = seg_;
 					else
 					{
-						if(temp_prev != temp){
+						if(temp_prev != temp)
 							temp_prev.next = seg_;
-						}
 						else
 							head = seg_;
 						seg_.next = temp;
@@ -160,8 +162,12 @@ public class Server
 			}
 		}
 
+		System.out.println("\nACKs sent to client: \n");
+		for(int i = 0; i < acksSent.size(); i++)
+			System.out.print(acksSent.get(i) + ", ");
+
 		//Store the client data to 'file'
-		System.out.println("\nWriting to file...");
+		System.out.println("\n\nWriting received data to file...");
 		FileOutputStream fp = null;
 		try{
 			fp = new FileOutputStream(file);
@@ -241,8 +247,8 @@ public class Server
         	result += value;
 
         	hexString = Integer.toHexString(result);
-       		 if (hexString.length() > 4) 
-		 {
+       		if (hexString.length() > 4) 
+		{
             		int carry = Integer.parseInt(("" + hexString.charAt(0)), 16);
             		hexString = hexString.substring(1, 5);
             		result = Integer.parseInt(hexString, 16);
@@ -251,14 +257,15 @@ public class Server
 		
 		return Integer.parseInt("FFFF", 16) - result - checksum;
     	}
+
+	//Check if the file is transferred correctly
 	private static void validateFile() throws Exception
 	{
 		System.out.println("\nValidating file write...");
 		String first = "", second = "";
 		Scanner input1 = new Scanner(new File("test.txt"));
 		Scanner input2 = new Scanner(new File(file));
-		boolean diff = false; //no differences
-
+		boolean diff = false; //No differences
 		while(input1.hasNextLine() && input2.hasNextLine())
 		{
     			first = input1.nextLine();
@@ -271,7 +278,6 @@ public class Server
     			}
 		}	
 		if(diff == false)
-			System.out.println("\nFile validated, no differences found.");
-
+			System.out.println("\nFile validated, No differences found.");
 	}
 }
