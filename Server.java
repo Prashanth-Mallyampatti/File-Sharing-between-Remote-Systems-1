@@ -25,7 +25,7 @@ public class Server
 	private static int port, seqNum = 0, checksum = 0;
 	private static List<Integer> receivedList = new ArrayList<Integer>();
 	private static List<Integer> ackList = new ArrayList<Integer>();
-	public static float probability;
+	private static float probability;
 	private static String file, packetType;
 	public static void main(String[] args)
 	{
@@ -97,22 +97,23 @@ public class Server
 				localPointer++;
 				out.write(data.getBytes());
 				
-				serverSegment seg = head;
-				while(seg != null)
+				//slide the server window to until which it has sent ACKs for
+				while(head != null)
 				{
-					if(seg.index == localPointer)
+					if(head.index == localPointer)
 					{
-						out.write(seg.data.getBytes());
-						seg = seg.next;
+						//write the data for which the ACKs have already been sent
+						out.write(head.data.getBytes());
 						head = head.next;
 						localPointer++; //maintain the order of receiving
+						continue;
 					}
-					else 
-						break;
+					break;
 				}
 				continue;
 			}
-
+			
+			//send ACKs for packets received after a packet loss, but dont write it to file
 			if(validateCheckSum(data) == 0 && seqNum > localPointer)
 			{
 				InetAddress client_IP = clientPacket.getAddress();
@@ -123,7 +124,8 @@ public class Server
 				DatagramPacket ackToClient = new DatagramPacket(ack, ack.length, client_IP, client_port);
 				serverSocket.send(ackToClient);
 				//System.out.println("ACK sent for: "+seqNum);
-			
+				
+				//generate a window and make head point to it
 				serverSegment seg_ = new serverSegment(seqNum, data);
 				if(head == null)
 					head = seg_;
@@ -140,14 +142,16 @@ public class Server
 						temp.next = seg_;
 					else
 					{
-						if(temp_prev != temp)
+						if(temp_prev != temp){
 							temp_prev.next = seg_;
+						}
 						else
 							head = seg_;
 						seg_.next = temp;
 					}
 				}
 			}
+			
 			}catch(Exception e)
 			{
 				System.out.println("ERROR");
@@ -170,7 +174,15 @@ public class Server
 			System.exit(-1);
 		}
 		
-		System.out.println("\n\nClosing socket....");	
+		try {
+			validateFile();
+		} catch (Exception fe)
+		{
+			System.out.println("File check error");
+			fe.printStackTrace();
+		}
+
+		System.out.println("\nClosing socket....");	
 		serverSocket.close();
 	}
 
@@ -239,4 +251,27 @@ public class Server
 		
 		return Integer.parseInt("FFFF", 16) - result - checksum;
     	}
+	private static void validateFile() throws Exception
+	{
+		System.out.println("\nValidating file write...");
+		String first = "", second = "";
+		Scanner input1 = new Scanner(new File("test.txt"));
+		Scanner input2 = new Scanner(new File(file));
+		boolean diff = false; //no differences
+
+		while(input1.hasNextLine() && input2.hasNextLine())
+		{
+    			first = input1.nextLine();
+    			second = input2.nextLine(); 
+
+    			if(!first.equals(second))
+			{
+				diff = true;
+        			System.out.println("Differences found: "+"\n"+first+'\n'+second);
+    			}
+		}	
+		if(diff == false)
+			System.out.println("\nFile validated, no differences found.");
+
+	}
 }
