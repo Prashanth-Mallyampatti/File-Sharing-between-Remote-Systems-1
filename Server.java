@@ -167,7 +167,7 @@ public class Server
 			System.out.print(acksSent.get(i) + ", ");
 
 		//Store the client data to 'file'
-		System.out.println("\n\nWriting received data to file...");
+		System.out.println("\n\nWriting received data to " + file);
 		FileOutputStream fp = null;
 		try{
 			fp = new FileOutputStream(file);

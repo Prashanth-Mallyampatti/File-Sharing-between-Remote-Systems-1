@@ -33,7 +33,7 @@ public class Client
 
 	public static void main(String[] args) throws Exception
 	{
-		System.out.println("\nClient started with Go-Back-N ARQ protocol.");
+		System.out.println("\nClient started with Selective Repeat ARQ protocol.");
 		if(args.length > 4)
 		{
 			host = args[0];
