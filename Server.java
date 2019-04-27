@@ -82,7 +82,7 @@ public class Server
 				continue;
 			}
 			//validate the data
-			if(validateCheckSum(data) == 0)
+			if(validateCheckSum(data) == 0 && seqNum == localPointer)
 			{
 				InetAddress client_IP = clientPacket.getAddress();
 				int client_port = clientPacket.getPort();
@@ -93,10 +93,7 @@ public class Server
 				serverSocket.send(ackToClient);
 				System.out.println("ACK sent for: "+seqNum);
 				
-				out.write(data.getBytes());
 				//Mark local pointer assuming ACK will reach successfully
-			if(seqNum == localPointer)
-			{
 				localPointer++;
 				out.write(data.getBytes());
 				serverSegment seg = head;
@@ -106,14 +103,27 @@ public class Server
 					{
 						out.write(seg.data.getBytes());
 						seg = seg.next;
+						head = head.next;
 						localPointer++; //maintain the order of receiving
 					}
 					else 
 						break;
 				}
+				continue;
 			}
-			else if(seqNum > localPointer)
+
+			if(validateCheckSum(data) == 0 && seqNum > localPointer)
 			{
+				InetAddress client_IP = clientPacket.getAddress();
+				int client_port = clientPacket.getPort();
+				byte[] ack = ackServer(seqNum);
+				
+				//Send ACK for the data received.
+				DatagramPacket ackToClient = new DatagramPacket(ack, ack.length, client_IP, client_port);
+				serverSocket.send(ackToClient);
+				System.out.println("ACK sent for: "+seqNum);
+			
+				out.write(data.getBytes());
 				serverSegment seg_ = new serverSegment(seqNum, data);
 				if(head == null)
 					head = seg_;
@@ -137,7 +147,6 @@ public class Server
 						seg_.next = temp;
 					}
 				}
-			}
 			}
 			}catch(Exception e)
 			{

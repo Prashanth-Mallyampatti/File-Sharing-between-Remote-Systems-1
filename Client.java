@@ -25,6 +25,7 @@ public class Client
 	private static List<Integer> sentPackets = new ArrayList<Integer>();
 	private static List<Integer> acksReceived = new ArrayList<Integer>();
 	protected static DatagramSocket clientSocket = null;
+	public static HashMap<Integer, Integer> map = new HashMap<Integer, Integer>();
 
 	protected Client()
 	{
@@ -94,7 +95,7 @@ public class Client
 		sendEOF(serverIp);
 
 		//Close client
-		System.out.println("\n\nAll data sent.\n\nClient closing..");
+		System.out.println("All data sent.\n\nClient closing..");
 		clientSocket.close();
 	}
 
@@ -109,10 +110,12 @@ public class Client
 				localPointer++;
 				continue;
 			}
+			
 			//Get packet parameters from local pointer
 			Segment temp = head;
 			while(temp.index != localPointer && temp != null)
 				temp = temp.next;
+
 			String s = temp.data;
 
 			//Add header to the packet
@@ -136,6 +139,7 @@ public class Client
 			try {
 				clientSocket.send(toServer);
 				System.out.println("Packet Sent: " + localPointer);
+				map.put(localPointer, 0);
 				localPointer++;
 				window[windowPointer] = 1;
 			} catch(Exception e2)
@@ -154,18 +158,18 @@ public class Client
 
 		//to receive ACKs from server
 		DatagramPacket server = new DatagramPacket(receive, receive.length);
-		boolean flag = true;
 		localPointer = localPointer - windowPointer;
 		try {
 	
 			//set timeout of 1000ms
 			clientSocket.setSoTimeout(1000);
-			while(flag)
+			while(true)
 			{
 				clientSocket.receive(server);
 				//loop until you get ACKs for all packets you sent earlier
 				ack = checkAck(server.getData());
 				System.out.println("ACK received for: " + ack);
+				map.put(ack, 1);
 
 				//if you receive any other, other than negative ACK, advance the window pointer to that packet
 				if(ack != -1)
@@ -178,7 +182,7 @@ public class Client
 						{
 							for(int i=1; i<N; i++)
 								window[i - 1] = window[i];
-						//	window[N - 1] = -1;
+							window[N - 1] = -1;
 							localPointer++;
 						}
 					}
@@ -186,8 +190,12 @@ public class Client
 			}
 		} catch(SocketTimeoutException e4)
 		{
+			System.out.println();
 			//If timed out, set the pointer to next packet of last received ACK
-			System.out.println("Timeout, sequence number: " + (ack+1));
+			for(int i: map.keySet())
+				if(map.get(i) == 0)
+					System.out.println("Timeout, sequence num: " + i);
+			System.out.println();
 		}
 	}
 
