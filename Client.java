@@ -25,7 +25,7 @@ public class Client
 	private static List<Integer> sentPackets = new ArrayList<Integer>();
 	private static List<Integer> acksReceived = new ArrayList<Integer>();
 	protected static DatagramSocket clientSocket = null;
-	public static HashMap<Integer, Integer> map = new HashMap<Integer, Integer>();
+	protected static HashMap<Integer, Integer> map = new HashMap<Integer, Integer>();
 
 	protected Client()
 	{
@@ -105,7 +105,9 @@ public class Client
 		{
 			if((localPointer * mss) > dataToSend.length)
 				break;
-			if(window[windowPointer] == 2)
+
+			//check to slide window
+			if(window[windowPointer] == 1)
 			{
 				localPointer++;
 				continue;
@@ -141,7 +143,6 @@ public class Client
 				System.out.println("Packet Sent: " + localPointer);
 				map.put(localPointer, 0);
 				localPointer++;
-				window[windowPointer] = 1;
 			} catch(Exception e2)
 			{
 				System.out.println("\nError sending packet");
@@ -160,7 +161,6 @@ public class Client
 		DatagramPacket server = new DatagramPacket(receive, receive.length);
 		localPointer = localPointer - windowPointer;
 		try {
-	
 			//set timeout of 1000ms
 			clientSocket.setSoTimeout(1000);
 			while(true)
@@ -171,20 +171,17 @@ public class Client
 				System.out.println("ACK received for: " + ack);
 				map.put(ack, 1);
 
-				//if you receive any other, other than negative ACK, advance the window pointer to that packet
-				if(ack != -1)
+				int ptr = ack - localPointer;
+				window[ptr] = 1;
+				if(ptr == 0)
 				{
-					int x = ack - localPointer;
-					window[ack - localPointer] = 2;
-					if((ack - localPointer) == 0)
+					//sliding the window
+					while(window[ptr] == 1)
 					{
-						while(window[x] == 2)
-						{
-							for(int i=1; i<N; i++)
-								window[i - 1] = window[i];
-							window[N - 1] = -1;
-							localPointer++;
-						}
+						for(int i=1; i<N; i++)
+							window[i - 1] = window[i];
+						window[N - 1] = -1;
+						localPointer++;
 					}
 				}
 			}

@@ -59,7 +59,7 @@ public class Server
 
 			String clientData = new String(clientPacket.getData()).substring(0, clientPacket.getLength());
 			seqNum = binToDec(clientData.substring(0, 32));
-			System.out.println("Packet Received: "+ seqNum);
+			//System.out.println("Packet Received: "+ seqNum);
 			packetType = clientData.substring(48, 64);
 
 			receivedList.add(seqNum);
@@ -91,11 +91,12 @@ public class Server
 				//Send ACK for the data received.
 				DatagramPacket ackToClient = new DatagramPacket(ack, ack.length, client_IP, client_port);
 				serverSocket.send(ackToClient);
-				System.out.println("ACK sent for: "+seqNum);
+				//System.out.println("ACK sent for: "+seqNum);
 				
 				//Mark local pointer assuming ACK will reach successfully
 				localPointer++;
 				out.write(data.getBytes());
+				
 				serverSegment seg = head;
 				while(seg != null)
 				{
@@ -121,9 +122,8 @@ public class Server
 				//Send ACK for the data received.
 				DatagramPacket ackToClient = new DatagramPacket(ack, ack.length, client_IP, client_port);
 				serverSocket.send(ackToClient);
-				System.out.println("ACK sent for: "+seqNum);
+				//System.out.println("ACK sent for: "+seqNum);
 			
-				out.write(data.getBytes());
 				serverSegment seg_ = new serverSegment(seqNum, data);
 				if(head == null)
 					head = seg_;
