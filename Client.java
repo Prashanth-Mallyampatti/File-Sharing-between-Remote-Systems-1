@@ -21,7 +21,7 @@ class Segment
 public class Client
 {
 	private static Segment head;
-	private static int port, N, mss, numPackets, localPointer = 0, windowPointer = 0, ack = -1;
+	private static int port, N, mss, numPackets, localPointer = 0, windowPointer = 0, ack = -1, max = 0;
 	private static String file, host;
 	protected static DatagramSocket clientSocket = null;
 	private static HashMap<Integer, Integer> map = new HashMap<Integer, Integer>();
@@ -81,13 +81,13 @@ public class Client
 		dividePacket(dataToSend);
 
 		long start = System.currentTimeMillis();
-
 		//Increment in size of MSS till the last packet
 		while((localPointer * mss) < dataToSend.length)
-		{	
+		{
+		
 			//Transmit data to server
 			sendPacketToServer(dataToSend, serverIp, window);
-
+			
 			//Receive ACK from server
 			receiveACK(window);
 		}
@@ -97,8 +97,8 @@ public class Client
 
 		long end = System.currentTimeMillis();
 
-		System.out.println("File Transfered.\nTime taken: " + (end - start) + " ms");
-
+		System.out.println("\nFile Transfered.\nTime taken: " + (end - start) + " ms");
+		
 		//Close client
 		System.out.println("\nClient closing..");
 		clientSocket.close();
@@ -150,6 +150,7 @@ public class Client
 				System.out.println("Packet Sent: " + localPointer);
 				map.put(localPointer, 0);
 				localPointer++;
+				max = Math.max(max, localPointer);
 			} catch(Exception e2)
 			{
 				System.out.println("\nError sending packet");
@@ -165,6 +166,7 @@ public class Client
 
 		//to receive ACKs from server
 		DatagramPacket server = new DatagramPacket(receive, receive.length);
+		int temp = localPointer;
 		localPointer = localPointer - windowPointer;
 		try {
 			//set timeout of 1000ms
@@ -176,7 +178,6 @@ public class Client
 				ack = checkAck(server.getData());
 				System.out.println("ACK received for: " + ack);
 				map.put(ack, 1);
-
 				int ptr = ack - localPointer;
 				window[ptr] = 1;
 				if(ptr == 0)
@@ -190,6 +191,13 @@ public class Client
 						localPointer++;
 					}
 				}
+				
+				//dont wait for ACK for the packet that is not sent, (if ACKs for all the packets 
+				//have been received in that particular window. 
+				//Without this the client will wait ACKs unnecessarily for the packets it hasn't
+				//sent at all, leading to increased file transfer time.
+				if(localPointer == max)
+					break;
 			}
 		} catch(SocketTimeoutException e4)
 		{
